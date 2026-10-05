@@ -39,21 +39,6 @@ ol li::marker{color:var(--acc);font-weight:700}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:13px}
 .chip.seg{background:var(--acc2);border-color:transparent;color:var(--acc)}
-.card{cursor:pointer;transition:border-color .15s}
-.card:hover{border-color:var(--acc)}
-.more{color:var(--acc);font-size:13px;font-weight:600;margin-top:auto}
-.ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
-.ov.on{display:flex}
-.modal{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:880px;width:100%;max-height:88vh;overflow:auto;padding:22px}
-.mh{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:6px}
-.mh h2{margin:0;font-size:20px}
-.x{font:inherit;font-size:22px;line-height:1;background:none;border:0;color:var(--mute);cursor:pointer}
-.ug{margin-top:18px;display:flex;justify-content:space-between;font-weight:600;color:var(--acc)}
-.tw{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
-th{color:var(--mute);font-weight:600;font-size:12px}
-.n{text-align:right}
 .empty{color:var(--mute);padding:40px;text-align:center}
 .err{background:var(--am);color:var(--amx);padding:12px 16px;border-radius:10px;margin-bottom:16px}
 </style>
@@ -84,15 +69,11 @@ th{color:var(--mute);font-weight:600;font-size:12px}
   <div class="grid" id="grid"></div>
 </div>
 
-<div class="ov" id="ov"><div class="modal" id="modal"></div></div>
-
 <script>
 // ====== CONFIGURAÇÃO ======
 // Cole aqui o link da planilha publicada como CSV
 // (Arquivo > Compartilhar > Publicar na Web > escolha a aba e "Valores separados por vírgula (.csv)")
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQFcye_obHOZYeE5nAcVRqiLbVSoEvqeltuTAxOEAGYw7UDzu_uPiKK7Tfwuxi4wAYpCgOBsyWIFhdA/pub?gid=1446943998&single=true&output=csv";
-// Link CSV da aba "Grade 2026" (publique essa aba separadamente e cole aqui)
-const GRADE_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQFcye_obHOZYeE5nAcVRqiLbVSoEvqeltuTAxOEAGYw7UDzu_uPiKK7Tfwuxi4wAYpCgOBsyWIFhdA/pubhtml?gid=1013223617&single=true";
 const ATUALIZAR_A_CADA_SEGUNDOS = 60;
 // ==========================
 
@@ -102,53 +83,7 @@ const DEMO_ROWS = [
  ["03/10/2026 09:32:41","bruno@escola.com","12","12","0","História 9º A","Geografia 9º A","","","","Ensino Médio","Fundamental II","","","História, Geografia, Sociologia"]
 ];
 
-let dados = [], idx = {}, grade = {}, gradeOk = null, visiveis = [];
-
-async function carregarGrade(){
-  if(!GRADE_URL){ gradeOk=null; return }
-  try{
-    const r=await fetch(GRADE_URL,{cache:"no-store"});
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    const rows=parseCSV(await r.text());
-    const h=rows[0].map(norm), c=n=>h.indexOf(n), g={};
-    rows.slice(1).forEach(v=>{
-      const f=n=>(c(n)>=0?(v[c(n)]||"").trim():"");
-      const e=norm(f("email_professor")); if(!e) return;
-      (g[e]=g[e]||[]).push({per:f("periodo_letivo"),uni:f("sigla_unidade"),seg:f("segmento"),serie:f("serie"),turma:f("turma"),disc:f("nome_disciplina")||f("sigla_disciplina"),aulas:+f("total_aulas").replace(",",".")||0});
-    });
-    grade=g; gradeOk=true;
-  }catch(e){ gradeOk=false }
-}
-const somaAulas=l=>l.reduce((s,x)=>s+x.aulas,0);
-function gradeInfo(x){
-  const n=somaAulas(grade[norm(x.email)]||[]);
-  return `<div class="more">Ver grade${gradeOk&&n?" · "+n+" aulas atribuídas":""} ›</div>`;
-}
-function abrirGrade(i){
-  const x=visiveis[i]; if(!x) return;
-  const l=grade[norm(x.email)]||[];
-  let corpo;
-  if(!GRADE_URL) corpo='<div class="err">Cole o link CSV da aba "Grade 2026" na constante <code>GRADE_URL</code> do código.</div>';
-  else if(gradeOk===false) corpo='<div class="err">Não foi possível ler a aba "Grade 2026". Confira se ela está publicada como CSV.</div>';
-  else if(!l.length) corpo='<div class="empty">Nenhuma aula encontrada na Grade 2026 para este e-mail.</div>';
-  else {
-    const por={}; l.forEach(a=>(por[a.uni||"(sem unidade)"]=por[a.uni||"(sem unidade)"]||[]).push(a));
-    corpo=Object.keys(por).sort().map(u=>`
-      <div class="ug"><span>${esc(u)}</span><span>${somaAulas(por[u])} aulas</span></div>
-      <div class="tw"><table><thead><tr><th>Segmento</th><th>Série</th><th>Turma</th><th>Disciplina</th><th class="n">Aulas</th></tr></thead><tbody>
-      ${por[u].map(a=>`<tr><td>${esc(a.seg)}</td><td>${esc(a.serie)}</td><td>${esc(a.turma)}</td><td>${esc(a.disc)}</td><td class="n">${a.aulas}</td></tr>`).join("")}
-      </tbody></table></div>`).join("");
-  }
-  document.getElementById("modal").innerHTML=`
-    <div class="mh"><div><h2>${esc(x.nome||x.email)}</h2><div class="date">${esc(x.email)}${l.length?" · "+somaAulas(l)+" aulas na grade":""}</div></div><button class="x" id="fechar" aria-label="Fechar">×</button></div>${corpo}`;
-  document.getElementById("ov").classList.add("on");
-}
-function fecharGrade(){ document.getElementById("ov").classList.remove("on") }
-document.addEventListener("click",e=>{
-  if(e.target.id==="fechar"||e.target.id==="ov") return fecharGrade();
-  const c=e.target.closest(".card"); if(c) abrirGrade(+c.dataset.i);
-});
-document.addEventListener("keydown",e=>{ if(e.key==="Escape") fecharGrade() });
+let dados = [], idx = {};
 
 function parseCSV(t){
   const rows=[];let r=[],c="",q=false;
@@ -214,14 +149,13 @@ function render(){
     (!q||norm([x.nome,x.email,...x.opcoes,...x.segs,...x.hab].join(" ")).includes(q)));
   l.sort((a,b)=>ord==="aulas"?b.total-a.total:ord==="nome"?(a.nome||a.email).localeCompare(b.nome||b.email):b.data-a.data);
 
-  visiveis=l;
   const soma=(k)=>l.reduce((s,x)=>s+x[k],0);
   document.getElementById("stats").innerHTML=
     [[l.length+" de "+totalBase,"respostas exibidas"],[soma("total"),"aulas solicitadas"],[soma("man"),"aulas de manhã"],[soma("tar"),"aulas à tarde"]]
     .map(([a,b])=>`<div class="stat"><b>${a}</b><span>${b}</span></div>`).join("");
 
-  document.getElementById("grid").innerHTML = l.length ? l.map((x,i)=>`
-    <article class="card" data-i="${i}">
+  document.getElementById("grid").innerHTML = l.length ? l.map(x=>`
+    <article class="card">
       <div class="top">
         <div><div class="mail">${esc(x.nome||x.email||"(sem nome)")}</div>${x.nome?`<div class="date">${esc(x.email)}</div>`:""}<div class="date">${esc(x.ts)}</div></div>
         <div class="qty">
@@ -233,7 +167,6 @@ function render(){
       ${x.opcoes.length?`<div><h3>${x.opcoes.length>1?"Ordem de preferência":"Unidade escolhida"}</h3><ol>${x.opcoes.map(o=>`<li>${esc(o)}</li>`).join("")}</ol></div>`:""}
       ${x.segs.length?`<div><h3>Segmentos preferidos</h3><div class="chips">${x.segs.map((s,i)=>`<span class="chip seg">${x.segs.length>1?(i+1)+"º · ":""}${esc(s)}</span>`).join("")}</div></div>`:""}
       ${x.hab.length?`<div><h3>Habilitações</h3><div class="chips">${x.hab.map(h=>`<span class="chip">${esc(h)}</span>`).join("")}</div></div>`:""}
-    ${gradeInfo(x)}
     </article>`).join("") : `<div class="empty">Nenhuma resposta encontrada com esses filtros.</div>`;
 }
 
@@ -262,7 +195,7 @@ async function carregar(){
       if(!r.ok) throw new Error("HTTP "+r.status);
       rows=parseCSV(await r.text());
     }
-    await carregarGrade(); dados=montar(rows); preencherSegmentos(); preencherUnidades(); render();
+    dados=montar(rows); preencherSegmentos(); preencherUnidades(); render();
     document.getElementById("sub").textContent="Atualizado às "+new Date().toLocaleTimeString("pt-BR")+" · atualiza sozinho a cada "+ATUALIZAR_A_CADA_SEGUNDOS+"s";
   }catch(e){
     err.innerHTML='<div class="err">Não foi possível ler a planilha ('+esc(e.message)+'). Se você abriu pela prévia do Claude, baixe o arquivo e abra no navegador (ou hospede-o); a prévia bloqueia conexões externas.</div>';
