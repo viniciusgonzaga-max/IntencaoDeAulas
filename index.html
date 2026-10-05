@@ -52,6 +52,8 @@ ol li::marker{color:var(--acc);font-weight:700}
   <div class="bar">
     <input type="search" id="q" placeholder="Buscar por e-mail, disciplina, habilitação…">
     <select id="seg"><option value="">Todos os segmentos (1ª opção)</option></select>
+    <select id="uni"><option value="">Todas as unidades</option></select>
+    <label><input type="checkbox" id="uni1"> só 1ª opção</label>
     <select id="turno">
       <option value="">Qualquer turno</option>
       <option value="m">Tem aulas de manhã</option>
@@ -60,7 +62,7 @@ ol li::marker{color:var(--acc);font-weight:700}
     <select id="ord">
       <option value="recente">Mais recentes</option>
       <option value="aulas">Mais aulas</option>
-      <option value="email">E-mail (A–Z)</option>
+      <option value="nome">Nome (A–Z)</option>
     </select>
     <label><input type="checkbox" id="ult" checked> Só a última resposta de cada e-mail</label>
   </div>
@@ -71,7 +73,7 @@ ol li::marker{color:var(--acc);font-weight:700}
 // ====== CONFIGURAÇÃO ======
 // Cole aqui o link da planilha publicada como CSV
 // (Arquivo > Compartilhar > Publicar na Web > escolha a aba e "Valores separados por vírgula (.csv)")
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQFcye_obHOZYeE5nAcVRqiLbVSoEvqeltuTAxOEAGYw7UDzu_uPiKK7Tfwuxi4wAYpCgOBsyWIFhdA/pub?output=csv";
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQFcye_obHOZYeE5nAcVRqiLbVSoEvqeltuTAxOEAGYw7UDzu_uPiKK7Tfwuxi4wAYpCgOBsyWIFhdA/pub?gid=1446943998&single=true&output=csv";
 const ATUALIZAR_A_CADA_SEGUNDOS = 60;
 // ==========================
 
@@ -101,7 +103,8 @@ const norm=s=>(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCas
 function mapear(head){
   const h=head.map(norm); const m={opc:[],seg:[]};
   h.forEach((x,i)=>{
-    if(/carimbo|timestamp/.test(x)) m.ts=i;
+    if(/^nome/.test(x)) m.nome=i;
+    else if(/carimbo|timestamp/.test(x)) m.ts=i;
     else if(/e-?mail/.test(x)) m.email=i;
     else if(/quantas aulas/.test(x)) m.total=i;
     else if(/manha/.test(x)) m.man=i;
@@ -116,15 +119,16 @@ function parseData(s){
   const m=(s||"").match(/(\d+)\/(\d+)\/(\d+)\s*(\d+)?:?(\d+)?:?(\d+)?/);
   return m? new Date(+m[3],+m[2]-1,+m[1],+(m[4]||0),+(m[5]||0),+(m[6]||0)) : new Date(0);
 }
+const unico=a=>a.length>1&&a.every(v=>norm(v)===norm(a[0]))?[a[0]]:a;
 function montar(rows){
   const m=mapear(rows[0]);
   return rows.slice(1).map(r=>{
     const g=i=>(i!=null?(r[i]||"").trim():"");
     return {
-      ts:g(m.ts), data:parseData(g(m.ts)), email:g(m.email),
+      ts:g(m.ts), data:parseData(g(m.ts)), email:g(m.email), nome:g(m.nome),
       total:+g(m.total)||0, man:+g(m.man)||0, tar:+g(m.tar)||0,
-      opcoes:[1,2,3,4,5].map(n=>g(m.opc[n])).filter(Boolean),
-      segs:[1,2,3,4].map(n=>g(m.seg[n])).filter(Boolean),
+      opcoes:unico([1,2,3,4,5].map(n=>g(m.opc[n])).filter(Boolean)),
+      segs:unico([1,2,3,4].map(n=>g(m.seg[n])).filter(Boolean)),
       hab:g(m.hab).split(/,\s*/).filter(Boolean)
     };
   });
@@ -133,16 +137,17 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 
 function render(){
   const q=norm(document.getElementById("q").value), seg=document.getElementById("seg").value,
-        tn=document.getElementById("turno").value, ord=document.getElementById("ord").value,
+        tn=document.getElementById("turno").value, uni=document.getElementById("uni").value, uni1=document.getElementById("uni1").checked, ord=document.getElementById("ord").value,
         ult=document.getElementById("ult").checked;
   let l=[...dados];
   if(ult){ const mapa={}; l.forEach(x=>{const k=norm(x.email)||Math.random(); if(!mapa[k]||x.data>mapa[k].data) mapa[k]=x}); l=Object.values(mapa) }
   const totalBase=l.length;
   l=l.filter(x=>
     (!seg||x.segs[0]===seg) &&
+    (!uni||(uni1?x.opcoes[0]===uni:x.opcoes.includes(uni))) &&
     (!tn||(tn==="m"?x.man>0:x.tar>0)) &&
-    (!q||norm([x.email,...x.opcoes,...x.segs,...x.hab].join(" ")).includes(q)));
-  l.sort((a,b)=>ord==="aulas"?b.total-a.total:ord==="email"?a.email.localeCompare(b.email):b.data-a.data);
+    (!q||norm([x.nome,x.email,...x.opcoes,...x.segs,...x.hab].join(" ")).includes(q)));
+  l.sort((a,b)=>ord==="aulas"?b.total-a.total:ord==="nome"?(a.nome||a.email).localeCompare(b.nome||b.email):b.data-a.data);
 
   const soma=(k)=>l.reduce((s,x)=>s+x[k],0);
   document.getElementById("stats").innerHTML=
@@ -152,19 +157,25 @@ function render(){
   document.getElementById("grid").innerHTML = l.length ? l.map(x=>`
     <article class="card">
       <div class="top">
-        <div><div class="mail">${esc(x.email||"(sem e-mail)")}</div><div class="date">${esc(x.ts)}</div></div>
+        <div><div class="mail">${esc(x.nome||x.email||"(sem nome)")}</div>${x.nome?`<div class="date">${esc(x.email)}</div>`:""}<div class="date">${esc(x.ts)}</div></div>
         <div class="qty">
           <div class="q"><b>${x.total}</b><span>aulas</span></div>
           <div class="q m"><b>${x.man}</b><span>manhã</span></div>
           <div class="q t"><b>${x.tar}</b><span>tarde</span></div>
         </div>
       </div>
-      ${x.opcoes.length?`<div><h3>Ordem de preferência</h3><ol>${x.opcoes.map(o=>`<li>${esc(o)}</li>`).join("")}</ol></div>`:""}
-      ${x.segs.length?`<div><h3>Segmentos preferidos</h3><div class="chips">${x.segs.map((s,i)=>`<span class="chip seg">${i+1}º · ${esc(s)}</span>`).join("")}</div></div>`:""}
+      ${x.opcoes.length?`<div><h3>${x.opcoes.length>1?"Ordem de preferência":"Unidade escolhida"}</h3><ol>${x.opcoes.map(o=>`<li>${esc(o)}</li>`).join("")}</ol></div>`:""}
+      ${x.segs.length?`<div><h3>Segmentos preferidos</h3><div class="chips">${x.segs.map((s,i)=>`<span class="chip seg">${x.segs.length>1?(i+1)+"º · ":""}${esc(s)}</span>`).join("")}</div></div>`:""}
       ${x.hab.length?`<div><h3>Habilitações</h3><div class="chips">${x.hab.map(h=>`<span class="chip">${esc(h)}</span>`).join("")}</div></div>`:""}
     </article>`).join("") : `<div class="empty">Nenhuma resposta encontrada com esses filtros.</div>`;
 }
 
+function preencherUnidades(){
+  const s=document.getElementById("uni"), atual=s.value;
+  const set=[...new Set(dados.flatMap(x=>x.opcoes))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+  s.innerHTML='<option value="">Todas as unidades</option>'+set.map(v=>`<option>${esc(v)}</option>`).join("");
+  s.value=atual;
+}
 function preencherSegmentos(){
   const s=document.getElementById("seg"), atual=s.value;
   const set=[...new Set(dados.map(x=>x.segs[0]).filter(Boolean))].sort();
@@ -180,21 +191,21 @@ async function carregar(){
       rows=[parseCSV(DEMO)[0].length?DEMO_HEAD():[],...DEMO_ROWS];
       err.innerHTML='<div class="err">Mostrando dados de exemplo. Cole o link CSV da planilha na constante <code>CSV_URL</code> no código.</div>';
     } else {
-      const r=await fetch(CSV_URL+(CSV_URL.includes("?")?"&":"?")+"t="+Date.now());
+      const r=await fetch(CSV_URL,{cache:"no-store"});
       if(!r.ok) throw new Error("HTTP "+r.status);
       rows=parseCSV(await r.text());
     }
-    dados=montar(rows); preencherSegmentos(); render();
+    dados=montar(rows); preencherSegmentos(); preencherUnidades(); render();
     document.getElementById("sub").textContent="Atualizado às "+new Date().toLocaleTimeString("pt-BR")+" · atualiza sozinho a cada "+ATUALIZAR_A_CADA_SEGUNDOS+"s";
   }catch(e){
-    err.innerHTML='<div class="err">Não foi possível ler a planilha ('+esc(e.message)+'). Confira se ela está publicada na web como CSV e se o link está correto.</div>';
+    err.innerHTML='<div class="err">Não foi possível ler a planilha ('+esc(e.message)+'). Se você abriu pela prévia do Claude, baixe o arquivo e abra no navegador (ou hospede-o); a prévia bloqueia conexões externas.</div>';
     document.getElementById("sub").textContent="";
   }
 }
 function DEMO_HEAD(){
   return ["Carimbo de data/hora","Endereço de e-mail","Quantas aulas você gostaria","manhã","tarde","1ª Opção","2ª Opção","3ª Opção","4ª Opção","5ª Opção","segmentos [1ª Opção]","segmentos [2ª Opção]","segmentos [3ª Opção]","segmentos [4ª Opção]","habilitação disciplinas"];
 }
-["q","seg","turno","ord","ult"].forEach(id=>document.getElementById(id).addEventListener("input",render));
+["q","seg","uni","uni1","turno","ord","ult"].forEach(id=>document.getElementById(id).addEventListener("input",render));
 carregar(); setInterval(carregar,ATUALIZAR_A_CADA_SEGUNDOS*1000);
 </script>
 </body>
