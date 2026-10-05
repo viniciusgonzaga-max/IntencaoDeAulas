@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preferências de atribuição de aulas</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f5f4ef;--card:#fff;--ink:#1d2433;--mute:#6b7280;--line:#e2e0d8;--acc:#2f3f9e;--acc2:#e8ebfa;--am:#fff1cc;--amx:#7a5a00;--ver:#dff3e6;--verx:#17603a}
+@media(prefers-color-scheme:dark){:root{--bg:#14161c;--card:#1d2029;--ink:#eceef4;--mute:#9aa1b2;--line:#2c303c;--acc:#9fb0ff;--acc2:#262b4a;--am:#40330f;--amx:#f2d27a;--ver:#173326;--verx:#8fe0b0}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Bricolage Grotesque",system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:28px;margin:0 0 4px;letter-spacing:-.02em}
+.sub{color:var(--mute);margin:0 0 22px}
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:130px}
+.stat b{display:block;font-size:24px;line-height:1.1}
+.stat span{color:var(--mute);font-size:13px}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+.bar input,.bar select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.bar input[type=search]{flex:1;min-width:220px}
+.bar label{display:flex;gap:6px;align-items:center;color:var(--mute);font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.mail{font-weight:600;word-break:break-all}
+.date{color:var(--mute);font-size:12px}
+.qty{display:flex;gap:8px;flex-shrink:0}
+.q{text-align:center;border-radius:8px;padding:4px 10px;background:var(--acc2);color:var(--acc);min-width:54px}
+.q b{display:block;font-size:20px;line-height:1.1}
+.q span{font-size:11px}
+.q.m{background:var(--am);color:var(--amx)}
+.q.t{background:var(--ver);color:var(--verx)}
+h3{font-size:13px;color:var(--mute);font-weight:600;margin:0 0 6px}
+ol{margin:0;padding-left:20px}
+ol li{padding:1px 0}
+ol li::marker{color:var(--acc);font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:13px}
+.chip.seg{background:var(--acc2);border-color:transparent;color:var(--acc)}
+.empty{color:var(--mute);padding:40px;text-align:center}
+.err{background:var(--am);color:var(--amx);padding:12px 16px;border-radius:10px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Preferências de atribuição de aulas</h1>
+  <p class="sub" id="sub">Carregando…</p>
+  <div id="err"></div>
+  <div class="stats" id="stats"></div>
+  <div class="bar">
+    <input type="search" id="q" placeholder="Buscar por e-mail, disciplina, habilitação…">
+    <select id="seg"><option value="">Todos os segmentos (1ª opção)</option></select>
+    <select id="turno">
+      <option value="">Qualquer turno</option>
+      <option value="m">Tem aulas de manhã</option>
+      <option value="t">Tem aulas à tarde</option>
+    </select>
+    <select id="ord">
+      <option value="recente">Mais recentes</option>
+      <option value="aulas">Mais aulas</option>
+      <option value="email">E-mail (A–Z)</option>
+    </select>
+    <label><input type="checkbox" id="ult" checked> Só a última resposta de cada e-mail</label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+// ====== CONFIGURAÇÃO ======
+// Cole aqui o link da planilha publicada como CSV
+// (Arquivo > Compartilhar > Publicar na Web > escolha a aba e "Valores separados por vírgula (.csv)")
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQFcye_obHOZYeE5nAcVRqiLbVSoEvqeltuTAxOEAGYw7UDzu_uPiKK7Tfwuxi4wAYpCgOBsyWIFhdA/pub?output=csv";
+const ATUALIZAR_A_CADA_SEGUNDOS = 60;
+// ==========================
+
+const DEMO = `Carimbo de data/hora,Endereço de e-mail,Quantas aulas você gostaria que fossem atribuídas a você e que você tem disponibilidade para lecionar?,Dessas aulas, quantas são para o período da manhã?,Dessas aulas, quantas são para o período da tarde?,1ª Opção (Obrigatório),2ª Opção (Opcional),3ª Opção (Opcional),4ª Opção (Opcional),5ª Opção (Opcional),Selecione suas preferências em relação aos segmentos. [1ª Opção],Selecione suas preferências em relação aos segmentos. [2ª Opção],Selecione suas preferências em relação aos segmentos. [3ª Opção],Selecione suas preferências em relação aos segmentos. [4ª Opção],Selecione todas as disciplinas para as quais tem habilitação:`;
+const DEMO_ROWS = [
+ ["02/10/2026 14:10:05","ana@escola.com","20","12","8","Matemática 7º A","Matemática 8º B","Física 1ª série","","","Fundamental II","Ensino Médio","","","Matemática, Física"],
+ ["03/10/2026 09:32:41","bruno@escola.com","12","12","0","História 9º A","Geografia 9º A","","","","Ensino Médio","Fundamental II","","","História, Geografia, Sociologia"]
+];
+
+let dados = [], idx = {};
+
+function parseCSV(t){
+  const rows=[];let r=[],c="",q=false;
+  for(let i=0;i<t.length;i++){
+    const ch=t[i];
+    if(q){ if(ch=='"'){ if(t[i+1]=='"'){c+='"';i++} else q=false } else c+=ch }
+    else if(ch=='"') q=true;
+    else if(ch==','){r.push(c);c=""}
+    else if(ch=='\n'){r.push(c);rows.push(r);r=[];c=""}
+    else if(ch!='\r') c+=ch;
+  }
+  if(c||r.length){r.push(c);rows.push(r)}
+  return rows.filter(x=>x.some(v=>v.trim()));
+}
+const norm=s=>(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+
+function mapear(head){
+  const h=head.map(norm); const m={opc:[],seg:[]};
+  h.forEach((x,i)=>{
+    if(/carimbo|timestamp/.test(x)) m.ts=i;
+    else if(/e-?mail/.test(x)) m.email=i;
+    else if(/quantas aulas/.test(x)) m.total=i;
+    else if(/manha/.test(x)) m.man=i;
+    else if(/tarde/.test(x)) m.tar=i;
+    else if(/segmento/.test(x)){ const n=+(x.match(/(\d)/)||[0,9])[1]; m.seg[n]=i }
+    else if(/\d.*opcao/.test(x)){ const n=+(x.match(/(\d)/)||[0,9])[1]; m.opc[n]=i }
+    else if(/habilita|disciplina/.test(x)) m.hab=i;
+  });
+  return m;
+}
+function parseData(s){
+  const m=(s||"").match(/(\d+)\/(\d+)\/(\d+)\s*(\d+)?:?(\d+)?:?(\d+)?/);
+  return m? new Date(+m[3],+m[2]-1,+m[1],+(m[4]||0),+(m[5]||0),+(m[6]||0)) : new Date(0);
+}
+function montar(rows){
+  const m=mapear(rows[0]);
+  return rows.slice(1).map(r=>{
+    const g=i=>(i!=null?(r[i]||"").trim():"");
+    return {
+      ts:g(m.ts), data:parseData(g(m.ts)), email:g(m.email),
+      total:+g(m.total)||0, man:+g(m.man)||0, tar:+g(m.tar)||0,
+      opcoes:[1,2,3,4,5].map(n=>g(m.opc[n])).filter(Boolean),
+      segs:[1,2,3,4].map(n=>g(m.seg[n])).filter(Boolean),
+      hab:g(m.hab).split(/,\s*/).filter(Boolean)
+    };
+  });
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function render(){
+  const q=norm(document.getElementById("q").value), seg=document.getElementById("seg").value,
+        tn=document.getElementById("turno").value, ord=document.getElementById("ord").value,
+        ult=document.getElementById("ult").checked;
+  let l=[...dados];
+  if(ult){ const mapa={}; l.forEach(x=>{const k=norm(x.email)||Math.random(); if(!mapa[k]||x.data>mapa[k].data) mapa[k]=x}); l=Object.values(mapa) }
+  const totalBase=l.length;
+  l=l.filter(x=>
+    (!seg||x.segs[0]===seg) &&
+    (!tn||(tn==="m"?x.man>0:x.tar>0)) &&
+    (!q||norm([x.email,...x.opcoes,...x.segs,...x.hab].join(" ")).includes(q)));
+  l.sort((a,b)=>ord==="aulas"?b.total-a.total:ord==="email"?a.email.localeCompare(b.email):b.data-a.data);
+
+  const soma=(k)=>l.reduce((s,x)=>s+x[k],0);
+  document.getElementById("stats").innerHTML=
+    [[l.length+" de "+totalBase,"respostas exibidas"],[soma("total"),"aulas solicitadas"],[soma("man"),"aulas de manhã"],[soma("tar"),"aulas à tarde"]]
+    .map(([a,b])=>`<div class="stat"><b>${a}</b><span>${b}</span></div>`).join("");
+
+  document.getElementById("grid").innerHTML = l.length ? l.map(x=>`
+    <article class="card">
+      <div class="top">
+        <div><div class="mail">${esc(x.email||"(sem e-mail)")}</div><div class="date">${esc(x.ts)}</div></div>
+        <div class="qty">
+          <div class="q"><b>${x.total}</b><span>aulas</span></div>
+          <div class="q m"><b>${x.man}</b><span>manhã</span></div>
+          <div class="q t"><b>${x.tar}</b><span>tarde</span></div>
+        </div>
+      </div>
+      ${x.opcoes.length?`<div><h3>Ordem de preferência</h3><ol>${x.opcoes.map(o=>`<li>${esc(o)}</li>`).join("")}</ol></div>`:""}
+      ${x.segs.length?`<div><h3>Segmentos preferidos</h3><div class="chips">${x.segs.map((s,i)=>`<span class="chip seg">${i+1}º · ${esc(s)}</span>`).join("")}</div></div>`:""}
+      ${x.hab.length?`<div><h3>Habilitações</h3><div class="chips">${x.hab.map(h=>`<span class="chip">${esc(h)}</span>`).join("")}</div></div>`:""}
+    </article>`).join("") : `<div class="empty">Nenhuma resposta encontrada com esses filtros.</div>`;
+}
+
+function preencherSegmentos(){
+  const s=document.getElementById("seg"), atual=s.value;
+  const set=[...new Set(dados.map(x=>x.segs[0]).filter(Boolean))].sort();
+  s.innerHTML='<option value="">Todos os segmentos (1ª opção)</option>'+set.map(v=>`<option>${esc(v)}</option>`).join("");
+  s.value=atual;
+}
+
+async function carregar(){
+  const err=document.getElementById("err"); err.innerHTML="";
+  try{
+    let rows;
+    if(!CSV_URL){
+      rows=[parseCSV(DEMO)[0].length?DEMO_HEAD():[],...DEMO_ROWS];
+      err.innerHTML='<div class="err">Mostrando dados de exemplo. Cole o link CSV da planilha na constante <code>CSV_URL</code> no código.</div>';
+    } else {
+      const r=await fetch(CSV_URL+(CSV_URL.includes("?")?"&":"?")+"t="+Date.now());
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      rows=parseCSV(await r.text());
+    }
+    dados=montar(rows); preencherSegmentos(); render();
+    document.getElementById("sub").textContent="Atualizado às "+new Date().toLocaleTimeString("pt-BR")+" · atualiza sozinho a cada "+ATUALIZAR_A_CADA_SEGUNDOS+"s";
+  }catch(e){
+    err.innerHTML='<div class="err">Não foi possível ler a planilha ('+esc(e.message)+'). Confira se ela está publicada na web como CSV e se o link está correto.</div>';
+    document.getElementById("sub").textContent="";
+  }
+}
+function DEMO_HEAD(){
+  return ["Carimbo de data/hora","Endereço de e-mail","Quantas aulas você gostaria","manhã","tarde","1ª Opção","2ª Opção","3ª Opção","4ª Opção","5ª Opção","segmentos [1ª Opção]","segmentos [2ª Opção]","segmentos [3ª Opção]","segmentos [4ª Opção]","habilitação disciplinas"];
+}
+["q","seg","turno","ord","ult"].forEach(id=>document.getElementById(id).addEventListener("input",render));
+carregar(); setInterval(carregar,ATUALIZAR_A_CADA_SEGUNDOS*1000);
+</script>
+</body>
+</html>
